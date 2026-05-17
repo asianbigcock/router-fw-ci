@@ -1,0 +1,160 @@
+name: JDCloud AX6600 Libwrt Autobuild.
+
+on:
+  schedule:
+    # 定时任务：每天北京时间凌晨 2 点 (UTC时间 18:00) 运行一次
+    - cron: '0 18 * * *'
+  workflow_dispatch: # 允许你在网页端手动点击运行测试
+
+# 必须授予 GITHUB_TOKEN 写入仓库的权限，才能更新 commit.txt
+permissions:
+  contents: write
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    # 将此 job 的结果输出，供后续的 build job 使用
+    outputs:
+      run_build: ${{ steps.check.outputs.run_build }}
+      latest_commit: ${{ steps.check.outputs.latest_commit }}
+      
+    steps:
+      - name: 检出当前仓库代码
+        uses: actions/checkout@v4
+
+      - name: 获取最新 Commit 并对比
+        id: check
+        run: |
+          # 1. 使用 GitHub API 获取目标仓库指定分支的最新 commit hash
+          API_URL="https://api.github.com/repos/LiBwrt/openwrt-6.x/commits/25.12-nss"
+          # 使用自带的 GITHUB_TOKEN 防止频繁请求被 API 限制
+          LATEST_COMMIT=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" $API_URL | jq -r '.sha')
+          
+          echo "上游最新 Commit: $LATEST_COMMIT"
+          
+          # 确保获取到的 commit 不是空的或 null
+          if [ -z "$LATEST_COMMIT" ] || [ "$LATEST_COMMIT" == "null" ]; then
+            echo "获取上游 commit 失败，退出流程。"
+            exit 1
+          fi
+
+          # 2. 读取本地仓库的 commit.txt（如果文件不存在则记为 none）
+          if [ -f "commit.txt" ]; then
+            LOCAL_COMMIT=$(cat commit.txt)
+          else
+            LOCAL_COMMIT="none"
+          fi
+          echo "本地记录的 Commit: $LOCAL_COMMIT"
+
+          # 3. 对比并设置输出
+          if [ "$LATEST_COMMIT" != "$LOCAL_COMMIT" ]; then
+            echo "发现新提交！准备更新记录并触发编译。"
+            echo "$LATEST_COMMIT" > commit.txt
+            
+            # 向 GITHUB_OUTPUT 写入变量，供后续步骤和 Job 使用
+            echo "run_build=true" >> $GITHUB_OUTPUT
+            echo "latest_commit=$LATEST_COMMIT" >> $GITHUB_OUTPUT
+          else
+            echo "上游没有新提交，无需操作。"
+            echo "run_build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 提交并推送新的 commit.txt (仅当有更新时)
+        if: steps.check.outputs.run_build == 'true'
+        run: |
+          # 配置机器人身份
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add commit.txt
+          git commit -m "chore: sync upstream openwrt-6.x to ${{ steps.check.outputs.latest_commit }}"
+          git push
+
+  # -------- 编译流程 --------
+  build:
+    needs: check-upstream
+    if: needs.check-upstream.outputs.run_build == 'true'
+    # 1. 指定系统为 Ubuntu 22.04
+    runs-on: ubuntu-22.04
+    
+    steps:
+      # 这里检出你自己的仓库，目的是为了能在第5步读取到自己仓库根目录下的 .config 文件
+      - name: 检出当前仓库代码
+        uses: actions/checkout@v4
+
+      # 2. 安装编译依赖
+      - name: 安装编译依赖
+        env:
+          DEBIAN_FRONTEND: noninteractive # 防止安装过程中弹出交互式对话框卡死
+        run: |
+          sudo apt update -y
+          sudo apt full-upgrade -y
+          sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+          bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
+          git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+          libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libfuse-dev libssl-dev libtool lrzsz \
+          genisoimage msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip libpython3-dev qemu-utils \
+          rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+
+      # 3. 克隆源码
+      - name: 克隆源码
+        run: |
+          git clone -b 25.12-nss --depth 1 --single-branch https://github.com/LiBwrt-op/openwrt-6.x.git libwrt
+
+      # 4. 更新 feeds
+      - name: 更新 feeds
+        run: |
+          cd libwrt
+          # 用最新的 IPQ-WIFI 固件
+          rm -rf package/firmware/ipq-wifi/Makefile
+          wget https://raw.githubusercontent.com/LiBwrt/openwrt-6.x/refs/heads/main-nss/package/firmware/ipq-wifi/Makefile -O package/firmware/ipq-wifi/Makefile
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      # 5. 传入自己仓库的 .config 到 libwrt /
+      - name: 传入 .config
+        run: |
+          # 确保你当前仓库的根目录下有一个名为 .config 的文件
+          cp jdcloud-re-cs-02.config libwrt/.config
+
+      # 6. 直接执行 make -j$(nproc) 编译
+      - name: 编译固件
+        run: |
+          cd libwrt
+          make -j$(nproc)
+
+      # 7. 打包文件并上传到 Art (Artifact)
+      - name: 压缩固件包
+        run: |
+          # 手动将所有文件打成一个 zip 包放在工作区根目录，以供 Release 步骤使用
+          cd libwrt/bin/targets/*/*/
+          zip -r ${GITHUB_WORKSPACE}/targets-all-files.zip ./*
+
+      - name: 上传压缩包到 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenWrt-Firmware-Zip
+          path: targets-all-files.zip
+
+      - name: 删除 packages 目录
+        run: |
+          # 删除 packages 目录
+          rm -rf libwrt/bin/targets/*/*/packages
+          echo "BUILD_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+
+      # 8. 把打包的文件和剩余的文件上传到 release
+      - name: 发布至 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # 使用最新 commit 的哈希作为版本 tag 
+          tag_name: libwrt-build-${{ needs.check-upstream.outputs.latest_commit }}
+          name: 京东云 AX6600 雅典娜 Libwrt 自动编译
+          body: |
+            源码: https://github.com/LiBwrt/openwrt-6.x
+            分支: 25.12-nss
+            编译时间: ${{ env.BUILD_TIME }}
+            补充说明: targets-all-files.zip 包含所有编译后产物,如需部分 kmod 可以下载下来看看,或许里面有你需要的. 😘
+            Commit: [${{ needs.check-upstream.outputs.latest_commit }}](https://github.com/LiBwrt/openwrt-6.x/commit/${{ needs.check-upstream.outputs.latest_commit }})
+          files: |
+            targets-all-files.zip
+            libwrt/bin/targets/*/*/*
