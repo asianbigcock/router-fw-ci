@@ -1,4 +1,4 @@
-name: JDCloud AX6600 Libwrt Autobuild.
+name: ZN M2 Libwrt Autobuild.
 
 on:
   schedule:
@@ -105,9 +105,6 @@ jobs:
       - name: 更新 feeds
         run: |
           cd libwrt
-          # 用最新的 IPQ-WIFI 固件
-          rm -rf package/firmware/ipq-wifi/Makefile
-          wget https://raw.githubusercontent.com/LiBwrt/openwrt-6.x/refs/heads/main-nss/package/firmware/ipq-wifi/Makefile -O package/firmware/ipq-wifi/Makefile
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
@@ -115,7 +112,7 @@ jobs:
       - name: 传入 .config
         run: |
           # 确保你当前仓库的根目录下有一个名为 .config 的文件
-          cp jdcloud-re-cs-02.config libwrt/.config
+          cp zn-m2.config libwrt/.config
 
       # 6. 直接执行 make -j$(nproc) 编译
       - name: 编译固件
@@ -148,7 +145,7 @@ jobs:
         with:
           # 使用最新 commit 的哈希作为版本 tag 
           tag_name: libwrt-build-${{ needs.check-upstream.outputs.latest_commit }}
-          name: 京东云 AX6600 雅典娜 Libwrt 自动编译
+          name: ZN M2 Libwrt 自动编译
           body: |
             源码: https://github.com/LiBwrt/openwrt-6.x
             分支: 25.12-nss
