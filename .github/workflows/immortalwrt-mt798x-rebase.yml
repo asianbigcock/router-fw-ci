@@ -1,4 +1,4 @@
-name: RAX3000M Immortalwrt From hanwckf
+name: RAX3000M EMMC 自动编译 (immortalwrt-mt798x-rebase )
 
 on:
   schedule:
@@ -26,7 +26,7 @@ jobs:
         id: check
         run: |
           # 1. 使用 GitHub API 获取目标仓库指定分支的最新 commit hash
-          API_URL="https://api.github.com/repos/hanwckf/immortalwrt-mt798x/commits/openwrt-21.02"
+          API_URL="https://api.github.com/repos/chasey-dev/immortalwrt-mt798x-rebase/commits/25.12"
           # 使用自带的 GITHUB_TOKEN 防止频繁请求被 API 限制
           LATEST_COMMIT=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" $API_URL | jq -r '.sha')
           
@@ -74,8 +74,8 @@ jobs:
   build:
     needs: check-upstream
     if: needs.check-upstream.outputs.run_build == 'true'
-    # 1. 指定系统为 Ubuntu 22.04
-    runs-on: ubuntu-22.04
+    # 1. 指定系统为 Ubuntu 24.04
+    runs-on: ubuntu-24.04
     
     steps:
       # 这里检出你自己的仓库，目的是为了能在第5步读取到自己仓库根目录下的 .config 文件
@@ -99,7 +99,7 @@ jobs:
       # 3. 克隆源码
       - name: 克隆源码
         run: |
-          git clone --depth=1 https://github.com/hanwckf/immortalwrt-mt798x.git wrt
+          git clone --depth=1 https://github.com/chasey-dev/immortalwrt-mt798x-rebase.git wrt
 
       # 4. 更新 feeds
       - name: 更新 feeds
@@ -144,14 +144,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           # 使用最新 commit 的哈希作为版本 tag 
-          tag_name: immortalwrt-mt798x-build-${{ needs.check-upstream.outputs.latest_commit }}
-          name: immortalwrt-mt798x rax3000m 自动编译
+          tag_name: immortalwrt-mt798x-rebase-${{ needs.check-upstream.outputs.latest_commit }}
+          name: immortalwrt-mt798x-rebase RAX3000M EMMC 自动编译
           body: |
-            源码: https://github.com/hanwckf/immortalwrt-mt798x
-            分支: openwrt-21.02
+            源码: https://github.com/chasey-dev/immortalwrt-mt798x-rebase
+            分支: 25.12
             编译时间: ${{ env.BUILD_TIME }}
             补充说明: targets-all-files.zip 包含所有编译后产物,如需部分 kmod 可以下载下来看看,或许里面有你需要的. 😘
-            Commit: [${{ needs.check-upstream.outputs.latest_commit }}]${{ needs.check-upstream.outputs.latest_commit }}
+            Commit: https://github.com/chasey-dev/immortalwrt-mt798x-rebase/commit/${{ needs.check-upstream.outputs.latest_commit }}
           files: |
             targets-all-files.zip
             wrt/bin/targets/*/*/*
