@@ -87,7 +87,7 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive # 防止安装过程中弹出交互式对话框卡死
         run: |
-          sudo apt remove --purge *x11* *jdk* -y
+          sudo apt remove --purge *x11* *jdk* *jre* -y
           sudo apt remove --purge *X11* -y
           sudo apt autoremove --purge -y
           sudo apt update -y
