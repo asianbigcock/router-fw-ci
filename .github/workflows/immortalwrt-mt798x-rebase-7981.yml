@@ -124,17 +124,17 @@ jobs:
           make -j$(nproc)
 
       # 7. 打包文件并上传到 Art (Artifact)
-      - name: 压缩固件包
+      - name: 压缩包
         run: |
           # 手动将所有文件打成一个 zip 包放在工作区根目录，以供 Release 步骤使用
-          cd wrt/bin/targets/*/*/
-          zip -r ${GITHUB_WORKSPACE}/targets-all-files.zip ./*
+          cd wrt/bin/targets/*/*/packages
+          zip -r ${GITHUB_WORKSPACE}/packages.zip ./*
 
       - name: 上传压缩包到 Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OpenWrt-Firmware-Zip
-          path: targets-all-files.zip
+          name: Packages
+          path: packages.zip
 
       - name: 删除 packages 目录
         run: |
@@ -153,8 +153,7 @@ jobs:
             源码: https://github.com/chasey-dev/immortalwrt-mt798x-rebase 分支: 25.12
             Commit: https://github.com/chasey-dev/immortalwrt-mt798x-rebase/commit/${{ needs.check-upstream.outputs.latest_commit }}
             编译时间: ${{ env.BUILD_TIME }}
-            补充说明: targets-all-files.zip 包含所有编译后产物,如需部分 kmod 可以下载下来看看,或许里面有你需要的. 😘
             
           files: |
-            targets-all-files.zip
+            packages.zip
             wrt/bin/targets/*/*/*
