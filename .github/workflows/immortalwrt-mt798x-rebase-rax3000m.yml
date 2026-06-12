@@ -1,4 +1,4 @@
-name: MT7981 系列自动编译 (immortalwrt-mt798x-rebase )
+name: RAX3000M 固件编译 (immortalwrt-mt798x-rebase )
 
 on:
   schedule:
@@ -74,8 +74,8 @@ jobs:
   build:
     needs: check-upstream
     if: needs.check-upstream.outputs.run_build == 'true'
-    # 1. 指定系统为 Ubuntu 24.04
-    runs-on: ubuntu-24.04
+    # 1. 指定系统为 Ubuntu 22.04
+    runs-on: ubuntu-22.04
     
     steps:
       # 这里检出你自己的仓库，目的是为了能在第5步读取到自己仓库根目录下的 .config 文件
@@ -115,7 +115,7 @@ jobs:
       - name: 传入 .config
         run: |
           # 确保你当前仓库的根目录下有一个名为 .config 的文件
-          cp 7981.config wrt/.config
+          cp rax3000m.config wrt/.config
 
       # 6. 直接执行 make -j$(nproc) 编译
       - name: 编译固件
@@ -148,7 +148,7 @@ jobs:
         with:
           # 使用最新 commit 的哈希作为版本 tag 
           tag_name: immortalwrt-mt798x-rebase-${{ needs.check-upstream.outputs.latest_commit }}
-          name: MT7981 系列机型自动编译
+          name: RAX3000M 固件编译 (immortalwrt-mt798x-rebase )
           body: |
             源码: https://github.com/chasey-dev/immortalwrt-mt798x-rebase 分支: 25.12
             Commit: https://github.com/chasey-dev/immortalwrt-mt798x-rebase/commit/${{ needs.check-upstream.outputs.latest_commit }}
